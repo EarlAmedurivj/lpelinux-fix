@@ -1,6 +1,6 @@
 # Linux LPE Toolkit
 
-Multi-architecture privilege escalation toolkit with 18 pre-built and runtime-compilable exploits. Supports amd64, arm64, 386, mips, mipsle, mips64, and mips64le. Detects kernel version, filters patched exploits, and tries each in order until root is obtained.
+Multi-architecture privilege escalation toolkit with 19 pre-built and runtime-compilable exploits. Supports amd64, arm64, 386, mips, mipsle, mips64, and mips64le. Detects kernel version, filters patched exploits, and tries each in order until root is obtained.
 
 ## Quick Start
 
@@ -48,17 +48,18 @@ Multi-architecture privilege escalation toolkit with 18 pre-built and runtime-co
 | 5 | Fragnesia v2 | skb_segment GRO coalesce | pre-built / compile |
 | 6 | PinTheft | RDS zerocopy + io_uring page-cache overwrite | pre-built / compile |
 | 7 | Dirty Pipe `CVE-2022-0847` | /etc/passwd page-cache overwrite | pre-built / compile |
-| 8 | PwnKit `CVE-2021-4034` | pkexec environment escape | pre-built / compile |
-| 9 | OverlayFS `CVE-2021-3493` | user-ns mount escape | pre-built / compile |
-| 10 | OvFS+FUSE `CVE-2023-0386` | FUSE mount escape | pre-built / compile |
-| 11 | Polkit D-Bus `CVE-2021-3560` | accounts-daemon race | pre-built / compile |
-| 12 | Docker Socket | writable /var/run/docker.sock | pre-built / compile |
-| 13 | netfilter OOB `CVE-2021-22555` | ip_tables corruption | pre-built / compile |
-| 14 | nft UAF2 `CVE-2022-2586` | nftables chain UAF | pre-built / compile |
-| 15 | pidfd race `CVE-2026-46333` | ssh-keysign/shadow FD theft | pre-built / compile |
-| 16 | CPU Timer Race `CVE-2025-38352` | POSIX timer race (PoC) | pre-built / compile |
-| 17 | nft UAF `CVE-2024-1086` | Notselwyn multi-file nftables | pre-built / compile |
-| 18 | GTFOBins | 80+ passwordless sudo techniques | go-handler |
+| 8 | CIFSwitch `CVE-2026-46243` | cifs.spnego + NSS namespace confusion | pre-built / compile |
+| 9 | PwnKit `CVE-2021-4034` | pkexec environment escape | pre-built / compile |
+| 10 | OverlayFS `CVE-2021-3493` | user-ns mount escape | pre-built / compile |
+| 11 | OvFS+FUSE `CVE-2023-0386` | FUSE mount escape | pre-built / compile |
+| 12 | Polkit D-Bus `CVE-2021-3560` | accounts-daemon race | pre-built / compile |
+| 13 | Docker Socket | writable /var/run/docker.sock | pre-built / compile |
+| 14 | netfilter OOB `CVE-2021-22555` | ip_tables corruption | pre-built / compile |
+| 15 | nft UAF2 `CVE-2022-2586` | nftables chain UAF | pre-built / compile |
+| 16 | pidfd race `CVE-2026-46333` | ssh-keysign/shadow FD theft | pre-built / compile |
+| 17 | CPU Timer Race `CVE-2025-38352` | POSIX timer race (PoC) | pre-built / compile |
+| 18 | nft UAF `CVE-2024-1086` | Notselwyn multi-file nftables | pre-built / compile |
+| 19 | GTFOBins | 80+ passwordless sudo techniques | go-handler |
 
 ## Build from Source
 
