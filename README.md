@@ -1,6 +1,6 @@
 # Linux LPE Toolkit
 
-Multi-architecture privilege escalation toolkit with 19 pre-built and runtime-compilable exploits. Supports amd64, arm64, 386, mips, mipsle, mips64, and mips64le. Detects kernel version, filters patched exploits, and tries each in order until root is obtained.
+Multi-architecture privilege escalation toolkit with 20 pre-built and runtime-compilable exploits. Supports amd64, arm64, 386, mips, mipsle, mips64, and mips64le. Detects kernel version, filters patched exploits, and tries each in order until root is obtained.
 
 ## Quick Start
 
@@ -52,14 +52,15 @@ Multi-architecture privilege escalation toolkit with 19 pre-built and runtime-co
 | 9 | PwnKit `CVE-2021-4034` | pkexec environment escape | pre-built / compile |
 | 10 | OverlayFS `CVE-2021-3493` | user-ns mount escape | pre-built / compile |
 | 11 | OvFS+FUSE `CVE-2023-0386` | FUSE mount escape | pre-built / compile |
-| 12 | Polkit D-Bus `CVE-2021-3560` | accounts-daemon race | pre-built / compile |
-| 13 | Docker Socket | writable /var/run/docker.sock | pre-built / compile |
-| 14 | netfilter OOB `CVE-2021-22555` | ip_tables corruption | pre-built / compile |
-| 15 | nft UAF2 `CVE-2022-2586` | nftables chain UAF | pre-built / compile |
-| 16 | pidfd race `CVE-2026-46333` | ssh-keysign/shadow FD theft | pre-built / compile |
-| 17 | CPU Timer Race `CVE-2025-38352` | POSIX timer race (PoC) | pre-built / compile |
-| 18 | nft UAF `CVE-2024-1086` | Notselwyn multi-file nftables | pre-built / compile |
-| 19 | GTFOBins | 80+ passwordless sudo techniques | go-handler |
+| 12 | Pack2TheRoot `CVE-2026-41651` | PackageKit D-Bus race → setuid root | compile |
+| 13 | Polkit D-Bus `CVE-2021-3560` | accounts-daemon race | pre-built / compile |
+| 14 | Docker Socket | writable /var/run/docker.sock | pre-built / compile |
+| 15 | netfilter OOB `CVE-2021-22555` | ip_tables corruption | pre-built / compile |
+| 16 | nft UAF2 `CVE-2022-2586` | nftables chain UAF | pre-built / compile |
+| 17 | pidfd race `CVE-2026-46333` | ssh-keysign/shadow FD theft | pre-built / compile |
+| 18 | CPU Timer Race `CVE-2025-38352` | POSIX timer race (PoC) | pre-built / compile |
+| 19 | nft UAF `CVE-2024-1086` | Notselwyn multi-file nftables | pre-built / compile |
+| 20 | GTFOBins | 80+ passwordless sudo techniques | go-handler |
 
 ## Build from Source
 
@@ -99,6 +100,7 @@ The pre-compiled binary archive for each release includes a statically linked Go
 - **`exploits/`**: C source files and pre-compiled binaries embedded via `//go:embed`
 
 ### Notable Changes
+- **cve_2026_41651.c**: Added Pack2TheRoot — raw D-Bus client (no libdbus) races PackageKit `InstallFiles` SIMULATE/NONE flags to trigger root-privileged postinst execution, drops setuid-root bash at `/var/tmp/.suid_bash`
 
 - All exploits (including leak-only/PoC-only) now spawn a root shell or execute the requested command
 - **cve_2026_46333.c**: Added `try_passwd_root()` — steals writable `/etc/shadow` fd from `passwd`, writes a known password hash, then spawns `su -`; falls back to leak-only methods

