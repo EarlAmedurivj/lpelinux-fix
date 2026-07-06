@@ -1,6 +1,6 @@
 # Linux LPE Toolkit
 
-Multi-architecture privilege escalation toolkit with 24 pre-built and runtime-compilable exploits. Supports amd64, arm64, 386, mips, mipsle, mips64, and mips64le. Detects kernel version, filters patched exploits, and tries each in order until root is obtained.
+Multi-architecture privilege escalation toolkit with 24 exploits (amd64 pre-built; other architectures compiled via gcc at runtime). Supports amd64, arm64, 386, mips, mipsle, mips64, and mips64le. Detects kernel version, filters patched exploits, and tries each in order until root is obtained.
 
 ## Quick Start
 
@@ -94,7 +94,7 @@ Requirements: Go 1.21+, gcc, and cross-compilers for target architectures:
 
 The `--just-build` flag resolves all usable exploits and prints their paths. Use it to verify what will be available at runtime.
 
-The pre-compiled binary archive for each release includes a statically linked Go binary with embedded C exploits pre-compiled for all supported architectures (amd64, arm64, 386, mips, mipsle, mips64, mips64le).
+The pre-compiled binary archive for each release includes a statically linked Go binary with embedded C exploits. Exploits 1–19 are pre-compiled for all architectures; exploits 20–24 are pre-compiled for amd64 only (other architectures compile from source at runtime).
 
 ## Architecture
 
