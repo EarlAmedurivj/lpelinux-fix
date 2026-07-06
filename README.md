@@ -52,7 +52,7 @@ Multi-architecture privilege escalation toolkit with 24 exploits (amd64 pre-buil
 | 9 | PwnKit `CVE-2021-4034` | pkexec environment escape | pre-built / compile |
 | 10 | OverlayFS `CVE-2021-3493` | user-ns mount escape | pre-built / compile |
 | 11 | OvFS+FUSE `CVE-2023-0386` | FUSE mount escape | pre-built / compile |
-| 12 | Pack2TheRoot `CVE-2026-41651` | PackageKit D-Bus race → setuid root | compile |
+| 12 | Pack2TheRoot `CVE-2026-41651` | PackageKit D-Bus race → setuid root | pre-built / compile |
 | 13 | Polkit D-Bus `CVE-2021-3560` | accounts-daemon race | pre-built / compile |
 | 14 | Docker Socket | writable /var/run/docker.sock | pre-built / compile |
 | 15 | netfilter OOB `CVE-2021-22555` | ip_tables corruption | pre-built / compile |
@@ -94,7 +94,7 @@ Requirements: Go 1.21+, gcc, and cross-compilers for target architectures:
 
 The `--just-build` flag resolves all usable exploits and prints their paths. Use it to verify what will be available at runtime.
 
-The pre-compiled binary archive for each release includes a statically linked Go binary with embedded C exploits. Exploits 1–19 are pre-compiled for all architectures; exploits 20–24 are pre-compiled for amd64 only (other architectures compile from source at runtime).
+The pre-compiled binary archive for each release includes a statically linked Go binary with embedded C exploits. All exploits are pre-compiled for all architectures.
 
 ## Architecture
 
