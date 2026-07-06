@@ -60,10 +60,10 @@ Multi-architecture privilege escalation toolkit with 24 exploits (amd64 pre-buil
 | 17 | pidfd race `CVE-2026-46333` | ssh-keysign/shadow FD theft | pre-built / compile |
 | 18 | CPU Timer Race `CVE-2025-38352` | POSIX timer race (PoC) | pre-built / compile |
 | 19 | nft UAF `CVE-2024-1086` | Notselwyn multi-file nftables | pre-built / compile |
-| 20 | PEdit COW `CVE-2026-46331` | tc-pedit page-cache overwrite su | compile |
-| 21 | DirtyClone `CVE-2026-43503` | ESP-in-UDP TEE page-cache passwd | compile |
-| 22 | Bad Epoll `CVE-2026-46242` | epoll close-vs-close race UAF | compile |
-| 23 | FUSE OOB `CVE-2026-31694` | FUSE readdir cache OOB -> passwd | compile |
+| 20 | PEdit COW `CVE-2026-46331` | tc-pedit page-cache overwrite su | pre-built / compile |
+| 21 | DirtyClone `CVE-2026-43503` | ESP-in-UDP TEE page-cache passwd | pre-built / compile |
+| 22 | Bad Epoll `CVE-2026-46242` | epoll close-vs-close race UAF | pre-built / compile |
+| 23 | FUSE OOB `CVE-2026-31694` | FUSE readdir cache OOB -> passwd | pre-built / compile |
 | 24 | GTFOBins | 80+ passwordless sudo techniques | go-handler |
 
 ## Build from Source
