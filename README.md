@@ -1,6 +1,6 @@
 # Linux LPE Toolkit
 
-Multi-architecture privilege escalation toolkit with 20 pre-built and runtime-compilable exploits. Supports amd64, arm64, 386, mips, mipsle, mips64, and mips64le. Detects kernel version, filters patched exploits, and tries each in order until root is obtained.
+Multi-architecture privilege escalation toolkit with 24 pre-built and runtime-compilable exploits. Supports amd64, arm64, 386, mips, mipsle, mips64, and mips64le. Detects kernel version, filters patched exploits, and tries each in order until root is obtained.
 
 ## Quick Start
 
@@ -60,7 +60,11 @@ Multi-architecture privilege escalation toolkit with 20 pre-built and runtime-co
 | 17 | pidfd race `CVE-2026-46333` | ssh-keysign/shadow FD theft | pre-built / compile |
 | 18 | CPU Timer Race `CVE-2025-38352` | POSIX timer race (PoC) | pre-built / compile |
 | 19 | nft UAF `CVE-2024-1086` | Notselwyn multi-file nftables | pre-built / compile |
-| 20 | GTFOBins | 80+ passwordless sudo techniques | go-handler |
+| 20 | PEdit COW `CVE-2026-46331` | tc-pedit page-cache overwrite su | compile |
+| 21 | DirtyClone `CVE-2026-43503` | ESP-in-UDP TEE page-cache passwd | compile |
+| 22 | Bad Epoll `CVE-2026-46242` | epoll close-vs-close race UAF | compile |
+| 23 | FUSE OOB `CVE-2026-31694` | FUSE readdir cache OOB -> passwd | compile |
+| 24 | GTFOBins | 80+ passwordless sudo techniques | go-handler |
 
 ## Build from Source
 
@@ -102,7 +106,15 @@ The pre-compiled binary archive for each release includes a statically linked Go
 ### Notable Changes
 - **cve_2026_41651.c**: Added Pack2TheRoot — raw D-Bus client (no libdbus) races PackageKit `InstallFiles` SIMULATE/NONE flags to trigger root-privileged postinst execution, drops setuid-root bash at `/var/tmp/.suid_bash`
 
+- `parseKernelVersion` fixed: added `parseIntPrefix` to handle `-rcN` suffixes when comparing kernel versions
+- `bad_epoll.c` rewritten with correct J-jaeyoung architecture: two epoll pairs, timerfd IRQ widening via 3000+ waiters, depth-3 oracle, acquire/release atomics on shared variables
 - All exploits (including leak-only/PoC-only) now spawn a root shell or execute the requested command
 - **cve_2026_46333.c**: Added `try_passwd_root()` — steals writable `/etc/shadow` fd from `passwd`, writes a known password hash, then spawns `su -`; falls back to leak-only methods
 - **cve_2025_38352.c**: Added dirtypipe-style `splice()` overwrite of `/etc/passwd` → `root::0:0:` → spawns `su -`
 - **Command mode**: Page-cache exploits use `--corrupt-only` to skip the interactive PTY bridge; `execCommandAsRoot()` pipes the command to `su` stdin for reliable non-interactive execution
+
+### New Exploits Added
+- **peditcow.c** (CVE-2026-46331): tc-pedit page-cache write primitive overwrites su ELF entry with shellcode. v5.18–v7.1-rc6. Unprivileged user+net namespace gives CAP_NET_ADMIN.
+- **dirtyclone.c** (CVE-2026-43503): DirtyClone Python port to C. ESP-in-UDP TEE netfilter target corrupts /etc/passwd. Self-contained AES-128-CBC implementation. v7.1-rc1–rc4.
+- **bad_epoll.c** (CVE-2026-46242): Bad Epoll close-vs-close race UAF. **Target-specific**: default offsets target lts-6.12.67 (kernelCTF). Customize `OFF_*` and `PIVOT*` defines for your kernel. Requires /proc/kallsyms (kptr_restrict=0). Run on an **unpatched kernel** — the fix (commit `a6dc643c6931`, adds `ep_clear_and_put`) was backported to many distros including Ubuntu 22.04's 6.8 HWE.
+- **cve_2026_31694.c** (CVE-2026-31694): FUSE readdir cache OOB write. Overflows 24 bytes into adjacent page-cache page to make /etc/passwd root passwordless. v6.15+. Requires fusermount3.

