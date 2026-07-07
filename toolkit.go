@@ -271,7 +271,7 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 				_, err := exec.LookPath("gcc")
 				return err != nil
 			},
-			SuccessCheck: func() bool { return true },
+			SuccessCheck: func() bool { return checkExploitMarker("cve_2021_4034") },
 		},
 		{
 			Name:        "cve_2021_3493",
@@ -280,7 +280,7 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 			Introduced:  "3.18",
 			FixedIn:     []string{"5.11"},
 			CompileCmd:  []string{"gcc", "-O2", "-static"},
-			SuccessCheck: func() bool { return true },
+			SuccessCheck: func() bool { return checkExploitMarker("cve_2021_3493") },
 		},
 		{
 			Name:        "cve_2023_0386",
@@ -289,7 +289,7 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 			Introduced:  "5.11",
 			FixedIn:     []string{"6.2"},
 			CompileCmd:  []string{"gcc", "-O2", "-static"},
-			SuccessCheck: func() bool { return true },
+			SuccessCheck: func() bool { return checkExploitMarker("cve_2023_0386") },
 		},
 		{
 			Name:        "cve_2021_22555",
@@ -298,7 +298,7 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 			Introduced:  "2.6.19",
 			FixedIn:     []string{"5.10"},
 			CompileCmd:  []string{"gcc", "-O2", "-static", "-m32"},
-			SuccessCheck: func() bool { return true },
+			SuccessCheck: func() bool { return checkExploitMarker("cve_2021_22555") },
 		},
 		{
 			Name:        "cve_2022_2586",
@@ -307,7 +307,7 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 			Introduced:  "3.16",
 			FixedIn:     []string{"5.19"},
 			CompileCmd:  []string{"gcc", "-O2", "-lmnl", "-lnftnl"},
-			SuccessCheck: func() bool { return true },
+			SuccessCheck: func() bool { return checkExploitMarker("cve_2022_2586") },
 		},
 		{
 			Name:        "cve_2024_1086",
@@ -321,7 +321,7 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 				_, err := precompiledFS.ReadFile(filepath.Join("exploits/bin", runtime.GOARCH, "cve_2024_1086"))
 				return err != nil
 			},
-			SuccessCheck: func() bool { return true },
+			SuccessCheck: func() bool { return checkExploitMarker("cve_2024_1086") },
 		},
 		{
 			Name:        "cifswitch",
@@ -384,7 +384,7 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 				_, err := exec.LookPath("dbus-send")
 				return err != nil
 			},
-			SuccessCheck: func() bool { return true },
+			SuccessCheck: func() bool { return checkExploitMarker("cve_2021_3560") },
 		},
 		{
 			Name:        "docker_sock",
@@ -396,7 +396,7 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 				_, err := os.Stat("/var/run/docker.sock")
 				return err != nil
 			},
-			SuccessCheck: func() bool { return true },
+			SuccessCheck: func() bool { return checkExploitMarker("docker_sock") },
 		},
 		{
 			Name:        "peditcow",
@@ -430,7 +430,6 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 				fd.Close()
 				return false
 			},
-			SuccessCheck: func() bool { return true },
 		},
 		{
 			Name:        "cve_2026_31694",
@@ -686,6 +685,15 @@ func checkFDRaceSucceeded() bool {
 		return true
 	}
 	return false
+}
+
+func checkExploitMarker(name string) bool {
+	path := filepath.Join(os.TempDir(), ".lpe_"+name)
+	_, err := os.Stat(path)
+	if err == nil {
+		os.Remove(path)
+	}
+	return err == nil
 }
 
 func markFDRaceSucceeded() {
