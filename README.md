@@ -9,7 +9,7 @@
 |---|---|
 | 脱离 GitHub | 部署时从自有服务器/CDN 下载本 fork 二进制, GitHub 仅作兜底 |
 | 修上游 bug | 上游 PwnKit 三重 gcc 依赖 + GCONV_PATH 被 ld.so 剥掉导致触发机制失效(老 glibc 目标实测失败); fork 内修复 |
-| 自持构建线 | build.sh 一键产出 amd64/arm64/386 三架构 |
+| 自持构建线 | build.sh 一键产出 amd64/arm64/386/mips/mipsle/mips64/mips64le 七架构(与上游对齐) |
 
 ## 补丁清单(相对上游)
 
@@ -36,7 +36,7 @@
 ## 构建
 
 ```bash
-./build.sh          # 容器内交叉编译三架构 → build_out/lpe-fork-{amd64,arm64,386}
+./build.sh          # 容器内交叉编译七架构 → build_out/lpe-fork-{amd64,arm64,386,mips,mipsle,mips64,mips64le}
 ```
 
 上传到自有服务器/CDN 后, 部署链自动优先使用(见 deploy.sh 的
