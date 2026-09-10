@@ -1,120 +1,61 @@
-# Linux LPE Toolkit
+# lpe-fork —— lpe-toolkit 懒同步 vendored fork
 
-Multi-architecture privilege escalation toolkit with 24 exploits (amd64 pre-built; other architectures compiled via gcc at runtime). Supports amd64, arm64, 386, mips, mipsle, mips64, and mips64le. Detects kernel version, filters patched exploits, and tries each in order until root is obtained.
+上游: https://github.com/portbuster1337/lpe-toolkit (基线 main @ 2ecb09b,
+即 v1.4.0 + "fix false-positive success reporting")
 
-## Quick Start
+## 为什么要 fork
 
-```bash
-# run directly (no gcc needed on target if pre-compiled binaries are embedded)
-./lpe-toolkit
+| 需求 | 说明 |
+|---|---|
+| 脱离 GitHub | 部署时从自有服务器/CDN 下载本 fork 二进制, GitHub 仅作兜底 |
+| 修上游 bug | 上游 PwnKit 三重 gcc 依赖 + GCONV_PATH 被 ld.so 剥掉导致触发机制失效(老 glibc 目标实测失败); fork 内修复 |
+| 自持构建线 | build.sh 一键产出 amd64/arm64/386 三架构 |
 
-# dry-run: show exploit plan without executing
-./lpe-toolkit --dry-run
+## 补丁清单(相对上游)
 
-# skip specific exploits
-./lpe-toolkit --skip "dirtyfrag,dirtypipe"
+1. **exploits/cve_2021_4034.c** —— 自包含 berdav 改版:
+   - 内嵌 `pwnkit.so`(centos:7 / glibc 2.17 构建, 前向兼容), 目标机零 gcc 依赖;
+   - 双通道触发: `PATH=GCONV_PATH=.` 越界写原语(SUID 非 root 场景) +
+     显式 `GCONV_PATH=.`(root / 不剥该变量的 glibc 场景);
+   - 非交互: `PK_CMD` 环境变量以 root 执行命令;
+   - 自建 /tmp/.pkXXXXXX + 父进程 watcher 清理, 不留残留。
+2. **exploits/pwnkit_so_src/pwnkit.c** —— gconv 模块:
+   写 lpe 成功标记 `/tmp/.lpe_cve_2021_4034` + 执行 PK_CMD。
+3. **copyfail 替换为 copyfail-go**: 实测上游 C 版提权失败而
+   badsectorlabs/copyfail-go 成功; 三架构 Go 二进制 vendor 进
+   `exploits/vendor_bin/`, 构建时覆盖 `exploits/bin/<arch>/copyfail`;
+   删除上游的 algif 模块 SkipCheck(模块内建于内核时误跳过, 疑似
+   C 版根本没跑的原因); Timeout 提到 120s。
+4. **toolkit.go**:
+   - 删 pwnkit 的 gcc SkipCheck(上游预编译二进制也被此检查先跳过);
+   - `-c` 模式向 exploit 注入 `PK_CMD`(runExploit cmd.Env);
+   - `pkExecuted` 标记: pwnkit 已借 PK_CMD 执行命令后, execCommandAsRoot
+     不再重复执行(sudo 兜底在无 sudo 机器上会二次运行并报错);
+   - GTFOBins `sudo -n -l` 的 stderr 在 -q 模式下静默。
 
-# execute a command once root is achieved and show its output
-./lpe-toolkit -c "id"
-
-# silent automation: suppress all output except the command result
-./lpe-toolkit -q -c "whoami"
-
-# verbose output (includes exploit stdout/stderr)
-./lpe-toolkit -v
-```
-
-## Usage
-
-| Flag | Description |
-|------|-------------|
-| `--dry-run` | Show which exploits are available/skipped |
-| `--just-build` | Resolve all exploits, print paths, exit (useful for packaging) |
-| `--skip LIST` | Comma-separated exploit names to skip |
-| `-c`, `--command CMD` | Execute CMD as root instead of spawning an interactive shell |
-| `-q`, `--quiet` | Suppress toolkit messages; only show root shell output or `unsuccessful in getting root` |
-| `-v`, `--verbose` | Include exploit stdout/stderr in output (mutually exclusive with `-q`) |
-
-**Note:** `-v` and `-q` are mutually exclusive — the toolkit exits with an error if both are specified.
-
-## Exploits
-
-| # | Name | Target | Type |
-|---|------|--------|------|
-| 1 | Copy Fail `CVE-2026-31431` | AF_ALG + splice page-cache write | pre-built / compile |
-| 2 | Dirty Frag `CVE-2026-43284` | xfrm-ESP/RxRPC page-cache write | pre-built / compile |
-| 3 | Fragnesia `CVE-2026-46300` | espintcp splice page-cache corruption | pre-built / compile |
-| 4 | DirtyDecrypt `CVE-2026-31635` | rxgk pagecache write | pre-built / compile |
-| 5 | Fragnesia v2 | skb_segment GRO coalesce | pre-built / compile |
-| 6 | PinTheft | RDS zerocopy + io_uring page-cache overwrite | pre-built / compile |
-| 7 | Dirty Pipe `CVE-2022-0847` | /etc/passwd page-cache overwrite | pre-built / compile |
-| 8 | CIFSwitch `CVE-2026-46243` | cifs.spnego + NSS namespace confusion | pre-built / compile |
-| 9 | PwnKit `CVE-2021-4034` | pkexec environment escape | pre-built / compile |
-| 10 | OverlayFS `CVE-2021-3493` | user-ns mount escape | pre-built / compile |
-| 11 | OvFS+FUSE `CVE-2023-0386` | FUSE mount escape | pre-built / compile |
-| 12 | Pack2TheRoot `CVE-2026-41651` | PackageKit D-Bus race → setuid root | pre-built / compile |
-| 13 | Polkit D-Bus `CVE-2021-3560` | accounts-daemon race | pre-built / compile |
-| 14 | Docker Socket | writable /var/run/docker.sock | pre-built / compile |
-| 15 | netfilter OOB `CVE-2021-22555` | ip_tables corruption | pre-built / compile |
-| 16 | nft UAF2 `CVE-2022-2586` | nftables chain UAF | pre-built / compile |
-| 17 | pidfd race `CVE-2026-46333` | ssh-keysign/shadow FD theft | pre-built / compile |
-| 18 | CPU Timer Race `CVE-2025-38352` | POSIX timer race (PoC) | pre-built / compile |
-| 19 | nft UAF `CVE-2024-1086` | Notselwyn multi-file nftables | pre-built / compile |
-| 20 | PEdit COW `CVE-2026-46331` | tc-pedit page-cache overwrite su | pre-built / compile |
-| 21 | DirtyClone `CVE-2026-43503` | ESP-in-UDP TEE page-cache passwd | pre-built / compile |
-| 22 | Bad Epoll `CVE-2026-46242` | epoll close-vs-close race UAF | pre-built / compile |
-| 23 | FUSE OOB `CVE-2026-31694` | FUSE readdir cache OOB -> passwd | pre-built / compile |
-| 24 | GTFOBins | 80+ passwordless sudo techniques | go-handler |
-
-## Build from Source
+## 构建
 
 ```bash
-# native build (pre-compile C exploits then embed in Go binary)
-make
-
-# cross-compile for all architectures (native arch's C exploits only)
-make build-all
-
-# run directly from source (compile exploits on target at runtime)
-make run-source
-
-# clean build artifacts
-make clean
+./build.sh          # 容器内交叉编译三架构 → build_out/lpe-fork-{amd64,arm64,386}
 ```
 
-Requirements: Go 1.21+, gcc, and cross-compilers for target architectures:
-- **arm64**: `aarch64-linux-gnu-gcc`
-- **386**: `i686-linux-gnu-gcc`
-- **mips**: `mips-linux-gnu-gcc`
-- **mipsle**: `mipsel-linux-gnu-gcc`
-- **mips64**: `mips64-linux-gnuabi64-gcc`
-- **mips64le**: `mips64el-linux-gnuabi64-gcc`
+上传到自有服务器/CDN 后, 部署链自动优先使用(见 deploy.sh 的
+`lpe-fork-${LPE_ARCH}` 段), GitHub 官方 release 保留为兜底。
 
-## Pre-Compiled Binary Packaging
+## 懒同步
 
-The `--just-build` flag resolves all usable exploits and prints their paths. Use it to verify what will be available at runtime.
+上游出新 CVE 且对目标有价值时:
+```bash
+git pull                # 合并上游
+./build.sh              # 重编三架构
+# 重新上传到服务器/CDN
+```
+平时零维护。
 
-The pre-compiled binary archive for each release includes a statically linked Go binary with embedded C exploits. All exploits are pre-compiled for all architectures.
+## 验证记录
 
-## Architecture
-
-- **`toolkit.go`**: Core exploit definitions, kernel version parsing, binary resolution, GTFOBins sudo abuse handler, `execCommandAsRoot()` for non-interactive command execution, `msg()`/`say()` verbosity helpers
-- **`main.go`**: CLI entry point with flags (`-c`, `-q`, `-v`, `--skip`, `--dry-run`, `--just-build`) and signal handling
-- **`build-exploits.sh`**: Cross-compilation script for C exploits
-- **`exploits/`**: C source files and pre-compiled binaries embedded via `//go:embed`
-
-### Notable Changes
-- **cve_2026_41651.c**: Added Pack2TheRoot — raw D-Bus client (no libdbus) races PackageKit `InstallFiles` SIMULATE/NONE flags to trigger root-privileged postinst execution, drops setuid-root bash at `/var/tmp/.suid_bash`
-
-- `parseKernelVersion` fixed: added `parseIntPrefix` to handle `-rcN` suffixes when comparing kernel versions
-- `bad_epoll.c` rewritten with correct J-jaeyoung architecture: two epoll pairs, timerfd IRQ widening via 3000+ waiters, depth-3 oracle, acquire/release atomics on shared variables
-- All exploits (including leak-only/PoC-only) now spawn a root shell or execute the requested command
-- **cve_2026_46333.c**: Added `try_passwd_root()` — steals writable `/etc/shadow` fd from `passwd`, writes a known password hash, then spawns `su -`; falls back to leak-only methods
-- **cve_2025_38352.c**: Added dirtypipe-style `splice()` overwrite of `/etc/passwd` → `root::0:0:` → spawns `su -`
-- **Command mode**: Page-cache exploits use `--corrupt-only` to skip the interactive PTY bridge; `execCommandAsRoot()` pipes the command to `su` stdin for reliable non-interactive execution
-
-### New Exploits Added
-- **peditcow.c** (CVE-2026-46331): tc-pedit page-cache write primitive overwrites su ELF entry with shellcode. v5.18–v7.1-rc6. Unprivileged user+net namespace gives CAP_NET_ADMIN.
-- **dirtyclone.c** (CVE-2026-43503): DirtyClone Python port to C. ESP-in-UDP TEE netfilter target corrupts /etc/passwd. Self-contained AES-128-CBC implementation. v7.1-rc1–rc4.
-- **bad_epoll.c** (CVE-2026-46242): Bad Epoll close-vs-close race UAF. **Target-specific**: default offsets target lts-6.12.67 (kernelCTF). Customize `OFF_*` and `PIVOT*` defines for your kernel. Requires /proc/kallsyms (kptr_restrict=0). Run on an **unpatched kernel** — the fix (commit `a6dc643c6931`, adds `ep_clear_and_put`) was backported to many distros including Ubuntu 22.04's 6.8 HWE.
-- **cve_2026_31694.c** (CVE-2026-31694): FUSE readdir cache OOB write. Overflows 24 bytes into adjacent page-cache page to make /etc/passwd root passwordless. v6.15+. Requires fusermount3.
+- centos:7.4 (glibc 2.17, 漏洞版 polkit) root 态: fork 的 pwnkit 触发成功,
+  `id` 证据 uid=0, 命令经 PK_CMD 单次执行(无二次 sudo 兜底), 无 /tmp 残留;
+- arm64 (alpine, 原生) `--dry-run`: 三架构均正常解析预编译 exploits;
+- 非 root 真机场景(老 glibc + 内核 <5.18 + pkexec 未补丁): 越界写原语路径,
+  已由独立 pwnkit 阶段在真机验证过同一技术路线。

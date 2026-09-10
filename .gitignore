@@ -9,3 +9,10 @@ lpe-toolkit-mips64le
 /tmp
 *.swp
 *.swo
+
+# [FORK] 构建产物不入库: 发行物走 Release assets, 源码克隆后 ./build.sh 重建
+build_out/
+exploits/bin/
+exploits/pwnkit_so_src/pwnkit.so
+exploits/pwnkit_so.h
+*.log
