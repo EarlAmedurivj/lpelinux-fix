@@ -188,7 +188,7 @@ type Toolkit struct {
 	pkExecuted bool // fork: pwnkit already ran the command as root via PK_CMD
 }
 
-func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *Toolkit {
+func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool, onlyNames []string) *Toolkit {
 	exploits := []Exploit{
 		{
 			Name:     "copyfail",
@@ -469,6 +469,19 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[-] Failed to create temp dir: %v\n", err)
 		os.Exit(1)
+	}
+
+	// [FORK] -only: run the listed exploits exclusively (skip everything else).
+	if len(onlyNames) > 0 {
+		allowed := make(map[string]bool)
+		for _, n := range onlyNames {
+			allowed[n] = true
+		}
+		for _, exp := range exploits {
+			if !allowed[exp.Name] {
+				skipped[exp.Name] = true
+			}
+		}
 	}
 
 	tk := &Toolkit{

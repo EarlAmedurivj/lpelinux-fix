@@ -13,6 +13,7 @@ func main() {
 	var quiet bool
 	var command string
 	var skipList string
+	var onlyList string
 	var dryRun bool
 	var justBuild bool
 	flag.BoolVar(&verbose, "v", false, "verbose output (includes exploit stdout/stderr)")
@@ -20,6 +21,7 @@ func main() {
 	flag.StringVar(&command, "c", "", "command to execute once root is achieved (output will be shown)")
 	flag.StringVar(&command, "command", "", "command to execute once root is achieved (output will be shown)")
 	flag.StringVar(&skipList, "skip", "", "comma-separated exploits to skip")
+	flag.StringVar(&onlyList, "only", "", "comma-separated exploits to run exclusively (overrides -skip)")
 	flag.BoolVar(&dryRun, "dry-run", false, "show exploit plan without running")
 	flag.BoolVar(&justBuild, "just-build", false, "compile/setup all exploits then exit (useful for packaging)")
 	flag.Parse()
@@ -36,7 +38,12 @@ func main() {
 		}
 	}
 
-	tk := NewToolkit(verbose, quiet, command, skipped)
+	var onlyNames []string
+	if onlyList != "" {
+		onlyNames = splitComma(onlyList)
+	}
+
+	tk := NewToolkit(verbose, quiet, command, skipped, onlyNames)
 
 	if dryRun {
 		tk.PrintPlan()
