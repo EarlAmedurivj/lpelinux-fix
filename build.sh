@@ -1,26 +1,31 @@
 #!/bin/bash
-# lpe-toolkit fork 全量构建: amd64 / arm64 / 386 / mips / mipsle /
-# mips64 / mips64le 七架构(与上游 release 对齐)。
-# 产物: build_out/lpe-fork-{amd64,arm64,386,mips,mipsle,mips64,mips64le}。
+# Full build of the lpe-toolkit fork for all 7 architectures:
+# amd64, arm64, 386, mips, mipsle, mips64, mips64le (same set as upstream).
+# Output: build_out/lpe-fork-{amd64,arm64,386,mips,mipsle,mips64,mips64le}.
 #
-# 构建方式: 持久化 builder 容器(工具链一次安装并校验)。
+# Build method: a persistent builder container (toolchain installed once and
+# verified), which avoids re-installing deps on every run and sidesteps
+# occasional docker image-store corruption.
 #
-# fork 补丁清单(相对上游 main 2ecb09b):
-#   1. cve_2021_4034.c —— 自包含 berdav 改版(零 gcc 依赖, 双通道触发,
-#      PK_CMD 非交互, watcher 清残留), 内嵌 per-arch pwnkit.so;
-#   2. pwnkit.c —— gconv 模块(标记 + PK_CMD);
-#   3. copyfail —— amd64/arm64/386 用 copyfail-go(实测 C 版失败),
-#      mips 系列保留上游 C 实现;
-#   4. toolkit.go —— 删 pwnkit 的 gcc SkipCheck; -c 注入 PK_CMD;
-#      pkExecuted 防二次执行; GTFOBins 噪声 -q 静默;
-#   5. build-exploits.sh —— 缺架构目录不再早退; io_uring.h v6.14。
+# Fork patch list (vs upstream main 2ecb09b):
+#   1. exploits/cve_2021_4034.c - self-contained berdav-based rewrite
+#      (no gcc on target, dual trigger channel, non-interactive PK_CMD,
+#      watcher cleanup), embedding a per-arch pwnkit.so;
+#   2. exploits/pwnkit_so_src/pwnkit.c - gconv module (marker + PK_CMD);
+#   3. copyfail - copyfail-go for amd64/arm64/386 (C version observed
+#      failing), upstream C implementation kept for the mips family;
+#   4. toolkit.go - removed pwnkit gcc SkipCheck; -c injects PK_CMD;
+#      pkExecuted prevents double execution; GTFOBins noise silenced in -q;
+#   5. build-exploits.sh - no early abort on missing arch dirs;
+#      vendored linux/io_uring.h v6.14 (needed by pintheft).
 #
-# 懒同步: 上游出新 CVE 时 git pull upstream main 后重跑本脚本即可。
+# Lazy sync: when upstream ships a relevant CVE, run:
+#   git pull upstream main && ./build.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 BUILDER="lpe-fork-builder-c"
 
-echo "[*] 准备 builder 容器 (工具链安装+校验, 一次)..."
+echo "[*] Preparing builder container (toolchain install + verify, once)..."
 if ! docker ps --format '{{.Names}}' | grep -qx "$BUILDER"; then
     docker rm -f "$BUILDER" >/dev/null 2>&1 || true
     docker run -d --name "$BUILDER" --platform linux/amd64 \
@@ -30,23 +35,23 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$BUILDER"; then
         apt-get update -qq >/dev/null 2>&1 || apt-get update -qq >/dev/null 2>&1 || true
         apt-get install -y -qq gcc gcc-aarch64-linux-gnu gcc-i686-linux-gnu \
             gcc-mips-linux-gnu gcc-mipsel-linux-gnu \
-            gcc-mips64-linux-gnuabi64 gcc-mips64el-linux-gnuabi64 >/dev/null 2>&1 \
+            gcc-mips64-linux-gnuabi64 gcc-mips64el-linux-gnuabi64 vim-common >/dev/null 2>&1 \
             || apt-get install -y -qq gcc gcc-aarch64-linux-gnu gcc-i686-linux-gnu \
             gcc-mips-linux-gnu gcc-mipsel-linux-gnu \
-            gcc-mips64-linux-gnuabi64 gcc-mips64el-linux-gnuabi64 >/dev/null 2>&1
+            gcc-mips64-linux-gnuabi64 gcc-mips64el-linux-gnuabi64 vim-common >/dev/null 2>&1
         mkdir -p /usr/include/linux /usr/include/x86_64-linux-gnu/linux \
             /usr/aarch64-linux-gnu/include/linux /usr/i686-linux-gnu/include/linux \
             /usr/mips-linux-gnu/include/linux /usr/mipsel-linux-gnu/include/linux \
             /usr/mips64-linux-gnuabi64/include/linux /usr/mips64el-linux-gnuabi64/include/linux
         cp /work/build-assets/linux/io_uring.h /usr/include/linux/io_uring.h
-        # 原生 multiarch 与交叉工具链的 include 根路径不同, 分开处理
+        # native multiarch and cross toolchains have different include roots
         cp /usr/include/linux/io_uring.h /usr/include/x86_64-linux-gnu/linux/io_uring.h
         for t in aarch64-linux-gnu i686-linux-gnu mips-linux-gnu mipsel-linux-gnu \
                  mips64-linux-gnuabi64 mips64el-linux-gnuabi64; do
             cp /usr/include/linux/io_uring.h "/usr/$t/include/linux/io_uring.h"
         done
         for c in gcc aarch64-linux-gnu-gcc i686-linux-gnu-gcc mips-linux-gnu-gcc \
-                 mipsel-linux-gnu-gcc mips64-linux-gnuabi64-gcc mips64el-linux-gnuabi64-gcc; do
+                 mipsel-linux-gnu-gcc mips64-linux-gnuabi64-gcc mips64el-linux-gnuabi64-gcc xxd; do
             command -v "$c" >/dev/null
         done
         test -f /usr/include/x86_64-linux-gnu/bits/wordsize.h
@@ -59,13 +64,13 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$BUILDER"; then
         mips64-linux-gnuabi64-gcc -static -o /tmp/smoke_mips64 /tmp/smoke.c
         mips64el-linux-gnuabi64-gcc -static -o /tmp/smoke_mips64el /tmp/smoke.c
         echo "toolchain verified"
-    ' || { echo "FATAL: builder 初始化失败"; docker rm -f "$BUILDER" >/dev/null 2>&1 || true; exit 1; }
+    ' || { echo "FATAL: builder init failed"; docker rm -f "$BUILDER" >/dev/null 2>&1 || true; exit 1; }
 fi
 
-echo "[*] 生成各架构 pwnkit_so_<arch>.h..."
+echo "[*] Generating per-arch pwnkit_so_<arch>.h..."
 ./exploits/rebuild_pwnkit_so.sh
 
-echo "[*] 交叉编译 exploits..."
+echo "[*] Cross-compiling exploits..."
 docker exec "$BUILDER" bash -c '
     set -e
     cd /work
@@ -74,18 +79,18 @@ docker exec "$BUILDER" bash -c '
         cp /work/exploits/pwnkit_so_$A.h /work/exploits/pwnkit_so.h
         TARGET_ARCH=$A ./build-exploits.sh >/tmp/b_$A.log 2>&1 || { echo "$A FAIL"; tail -8 /tmp/b_$A.log; exit 1; }
     done
-    # copyfail: amd64/arm64/386 覆盖为 copyfail-go (mips 系列保留 C 版)
+    # copyfail: Go binary for amd64/arm64/386, C implementation for mips family
     cp exploits/vendor_bin/amd64/copyfail exploits/bin/amd64/copyfail
     cp exploits/vendor_bin/arm64/copyfail exploits/bin/arm64/copyfail
     cp exploits/vendor_bin/386/copyfail   exploits/bin/386/copyfail
-    # cve_2021_22555 是 32 位专属: amd64 发货物用独立 multilib 容器编的版本
+    # cve_2021_22555 is 32-bit only; amd64 ships the multilib-built binary
     cp exploits/vendor_bin/amd64/cve_2021_22555 exploits/bin/amd64/cve_2021_22555
     for a in amd64 arm64 386 mips mipsle mips64 mips64le; do
         echo -n "$a: "; ls exploits/bin/$a 2>/dev/null | wc -l
     done
 '
 
-echo "[*] Go 打包七架构..."
+echo "[*] Packaging Go binaries for all 7 archs..."
 docker exec "$BUILDER" bash -c '
     set -e
     cd /work
@@ -100,5 +105,5 @@ docker exec "$BUILDER" bash -c '
     ls -la build_out/
 '
 
-echo "OK: build_out/lpe-fork-{amd64,arm64,386,mips,mipsle,mips64,mips64le} 就绪。"
-echo "上传到你的服务器/CDN 供部署链使用。"
+echo "OK: build_out/lpe-fork-{amd64,arm64,386,mips,mipsle,mips64,mips64le} ready."
+echo "Upload to your own server/CDN for the deploy chain to use."

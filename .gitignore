@@ -10,7 +10,7 @@ lpe-toolkit-mips64le
 *.swp
 *.swo
 
-# [FORK] 构建产物不入库: 发行物走 Release assets, 源码克隆后 ./build.sh 重建
+# [FORK] build artifacts stay out of git; ship them as Release assets, ./build.sh rebuilds from source
 build_out/
 exploits/bin/
 exploits/pwnkit_so_src/pwnkit.so
