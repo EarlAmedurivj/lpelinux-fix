@@ -280,6 +280,11 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool, on
 			// no gcc needed on the target; upstream gcc SkipCheck removed
 			// (upstream skipped the exploit even though the pre-compiled
 			// binary was embedded, because SkipCheck runs before extraction).
+			// [FORK] 30m timeout: in interactive mode the root shell may stay
+			// open for minutes; the default 30s used to kill the user's shell
+			// and mark a successful exploit as failed (observed on a real
+			// CentOS 7 target).
+			Timeout:      1800 * time.Second,
 			SuccessCheck: func() bool { return checkExploitMarker("cve_2021_4034") },
 		},
 		{
