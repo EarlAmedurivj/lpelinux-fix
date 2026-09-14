@@ -209,6 +209,23 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool, on
 			// fails fast on its own when AF_ALG is unavailable.
 		},
 		{
+			Name:        "cve_2021_4034",
+			Filename:    "cve_2021_4034.c",
+			Description: "CVE-2021-4034: PwnKit - pkexec environment escape",
+			Introduced:  "2.6",
+			CompileCmd:  []string{"gcc", "-O2", "-static"},
+			// [FORK] self-contained berdav-based rewrite: embeds pwnkit.so,
+			// no gcc needed on the target; upstream gcc SkipCheck removed
+			// (upstream skipped the exploit even though the pre-compiled
+			// binary was embedded, because SkipCheck runs before extraction).
+			// [FORK] 30m timeout: in interactive mode the root shell may stay
+			// open for minutes; the default 30s used to kill the user's shell
+			// and mark a successful exploit as failed (observed on a real
+			// CentOS 7 target).
+			Timeout:      1800 * time.Second,
+			SuccessCheck: func() bool { return checkExploitMarker("cve_2021_4034") },
+		},
+		{
 			Name:        "dirtyfrag",
 			Filename:    "dirtyfrag.c",
 			Description: "CVE-2026-43284+CVE-2026-43500: Dirty Frag - xfrm-ESP/RxRPC page-cache write",
@@ -269,23 +286,6 @@ func NewToolkit(verbose, quiet bool, command string, skipped map[string]bool, on
 			Introduced:  "5.8",
 			FixedIn:     []string{"5.10.102", "5.15.25", "5.16.11"},
 			CompileCmd:  []string{"gcc", "-O2", "-static"},
-		},
-		{
-			Name:        "cve_2021_4034",
-			Filename:    "cve_2021_4034.c",
-			Description: "CVE-2021-4034: PwnKit - pkexec environment escape",
-			Introduced:  "2.6",
-			CompileCmd:  []string{"gcc", "-O2", "-static"},
-			// [FORK] self-contained berdav-based rewrite: embeds pwnkit.so,
-			// no gcc needed on the target; upstream gcc SkipCheck removed
-			// (upstream skipped the exploit even though the pre-compiled
-			// binary was embedded, because SkipCheck runs before extraction).
-			// [FORK] 30m timeout: in interactive mode the root shell may stay
-			// open for minutes; the default 30s used to kill the user's shell
-			// and mark a successful exploit as failed (observed on a real
-			// CentOS 7 target).
-			Timeout:      1800 * time.Second,
-			SuccessCheck: func() bool { return checkExploitMarker("cve_2021_4034") },
 		},
 		{
 			Name:        "cve_2021_3493",
